@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hologram CAD Portfolio Viewer</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background-color: #050a12;
+      font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      color: #00f3ff;
+    }
+    #canvas-container {
+      width: 100vw;
+      height: 100vh;
+      display: block;
+    }
+    .hud-overlay {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      pointer-events: none;
+      border-left: 3px solid #00f3ff;
+      padding-left: 15px;
+      text-shadow: 0 0 10px rgba(0, 243, 255, 0.7);
+    }
+    .hud-overlay h1 {
+      margin: 0 0 5px 0;
+      font-size: 1.4rem;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+    .hud-overlay p {
+      margin: 0;
+      font-size: 0.85rem;
+      color: #80f9ff;
+    }
+    .controls-panel {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      background: rgba(5, 15, 28, 0.8);
+      border: 1px solid rgba(0, 243, 255, 0.4);
+      padding: 12px 16px;
+      border-radius: 6px;
+      display: flex;
+      gap: 15px;
+      align-items: center;
+      backdrop-filter: blur(4px);
+    }
+    button {
+      background: rgba(0, 243, 255, 0.15);
+      border: 1px solid #00f3ff;
+      color: #00f3ff;
+      padding: 6px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: all 0.2s;
+    }
+    button:hover {
+      background: #00f3ff;
+      color: #050a12;
+      box-shadow: 0 0 12px #00f3ff;
+    }
+  </style>
+  <!-- Import Three.js and Addons via CDN -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com",
+        "three/addons/": "https://unpkg.com"
+      }
+    }
+  </script>
+</head>
+<body>
+
+  <div class="hud-overlay">
+    <h1>CAD Projection // Active</h1>
+    <p>Left-Click: Rotate | Right-Click: Pan | Scroll: Zoom</p>
+  </div>
+
+  <div class="controls-panel">
+    <button id="toggle-wireframe">Toggle Wireframe</button>
+    <button id="toggle-spin">Pause Rotation</button>
+    <button id="change-color">Cycle Hologram Color</button>
+  </div>
+
+  <div id="canvas-container"></div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+    // 1. Scene & Camera Setup
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x050a12, 0.035);
+
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(4, 3, 5);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+    // 2. Orbit Controls (Mouse/Touch Interaction)
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+
+    // 3. Hologram Grid Floor
+    const gridHelper = new THREE.GridHelper(12, 24, 0x00f3ff, 0x0a2e3d);
+    gridHelper.position.y = -1.2;
+    scene.add(gridHelper);
+
+    // 4. Custom Hologram Shader Material (Fresnel Glow + Scanlines)
+    const holoColors = [
+      new THREE.Color(0x00f3ff), // Cyan
+      new THREE.Color(0x00ff88), // Matrix Green
+      new THREE.Color(0xff9900), // Amber HUD
+      new THREE.Color(0xb84dff)  // Ultraviolet
+    ];
+    let currentColorIndex = 0;
+
+    const holoMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0 },
+        uColor: { value: holoColors[0] }
+      },
+      vertexShader: `
+        varying vec3 vNormal;
+        varying vec3 vViewPosition;
+        varying vec3 vWorldPos;
+        void main() {
+          vNormal = normalize(normalMatrix * normal);
+          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+          vViewPosition = -mvPosition.xyz;
+          vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
+        uniform float uTime;
+        uniform vec3 uColor;
+        varying vec3 vNormal;
+        varying vec3 vViewPosition;
+        varying vec3 vWorldPos;
+        void main() {
+          vec3 normal = normalize(vNormal);
+          vec3 viewDir = normalize(vViewPosition);
+          
+          // Fresnel edge glow
+          float fresnel = pow(1.0 - abs(dot(normal, viewDir)), 2.2);
+          
+          // Animated horizontal scanlines
+          float scanline = sin(vWorldPos.y * 35.0 - uTime * 4.0) * 0.5 + 0.5;
+          float alpha = clamp(fresnel * 0.85 + scanline * 0.15 + 0.1, 0.0, 0.95);
+          
+          gl_FragColor = vec4(uColor * (1.2 + fresnel), alpha);
+        }
+      `,
+      transparent: true,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+
+    // Container for the CAD Model
+    const modelGroup = new THREE.Group();
+    scene.add(modelGroup);
+
+    // --- PLACEHOLDER CAD ASSEMBLY (Replace this block with GLTFLoader below) ---
+    const coreGeo = new THREE.CylinderGeometry(1, 1, 0.6, 24);
+    const ringGeo = new THREE.TorusGeometry(1.4, 0.15, 16, 48);
+    ringGeo.rotateX(Math.PI / 2);
+    const shaftGeo = new THREE.CylinderGeometry(0.3, 0.3, 2.2, 16);
+
+    [coreGeo, ringGeo, shaftGeo].forEach(geo => {
+      const mesh = new THREE.Mesh(geo, holoMaterial);
+      // Add crisp CAD edge lines
+      const edges = new THREE.EdgesGeometry(geo, 15);
+      const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.4 });
+      const lineSegments = new THREE.LineSegments(edges, lineMat);
+      mesh.add(lineSegments);
+      modelGroup.add(mesh);
+    });
+    // -------------------------------------------------------------------------
+
+    /* --- UNCOMMENT THIS TO LOAD YOUR OWN .GLB CAD FILE ---
+    const loader = new GLTFLoader();
+    loader.load('./models/your-cad-part.glb', (gltf) => {
+      const cadModel = gltf.scene;
+      cadModel.traverse((child) => {
+        if (child.isMesh) {
+          child.material = holoMaterial;
+          const edges = new THREE.EdgesGeometry(child.geometry, 20);
+          const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35 }));
+          child.add(line);
+        }
+      });
+      modelGroup.add(cadModel);
+    });
+    ------------------------------------------------------ */
+
+    // 5. Interactive UI Buttons
+    let autoSpin = true;
+    document.getElementById('toggle-wireframe').addEventListener('click', () => {
+      holoMaterial.wireframe = !holoMaterial.wireframe;
+    });
+    document.getElementById('toggle-spin').addEventListener('click', (e) => {
+      autoSpin = !autoSpin;
+      e.target.textContent = autoSpin ? 'Pause Rotation' : 'Resume Rotation';
+    });
+    document.getElementById('change-color').addEventListener('click', () => {
+      currentColorIndex = (currentColorIndex + 1) % holoColors.length;
+      holoMaterial.uniforms.uColor.value = holoColors[currentColorIndex];
+      gridHelper.material.color = holoColors[currentColorIndex];
+    });
+
+    // 6. Resize & Animation Loop
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    const clock = new THREE.Clock();
+    function animate() {
+      requestAnimationFrame(animate);
+      const elapsed = clock.getElapsedTime();
+      holoMaterial.uniforms.uTime.value = elapsed;
+
+      if (autoSpin) {
+        modelGroup.rotation.y += 0.005;
+      }
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+  </script>
+</body>
+</html>
