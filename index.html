@@ -9,13 +9,13 @@
   canvas { width: 100vw; height: 100vh; display: block; cursor: grab; }
   canvas:active { cursor: grabbing; }
   .nav-arrow { position: absolute; top: 50%; transform: translateY(-50%); background: rgba(5,15,28,0.75); border: 1px solid rgba(0,243,255,0.45); color: #00f3ff; width: 48px; height: 64px; font-size: 1.6rem; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); transition: 0.2s; z-index: 10; }
-  .nav-arrow:hover { background: #00f3ff; color: #050a12; box-shadow: 0 0 15px #00f3ff; }
+  .nav-arrow:hover { background: currentColor; color: #050a12; box-shadow: 0 0 15px currentColor; }
   #prev-model { left: 20px; }
   #next-model { right: 20px; }
   .model-indicator { position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%); font-size: 0.85rem; letter-spacing: 2px; text-transform: uppercase; opacity: 0.85; pointer-events: none; text-shadow: 0 0 8px currentColor; }
   .controls-panel { position: absolute; bottom: 20px; left: 20px; background: rgba(5,15,28,0.8); border: 1px solid rgba(0,243,255,0.4); padding: 10px 14px; border-radius: 6px; display: flex; gap: 12px; backdrop-filter: blur(4px); }
   .controls-hint { position: absolute; bottom: 20px; right: 20px; background: rgba(5,15,28,0.65); border: 1px solid rgba(0,243,255,0.25); padding: 10px 14px; border-radius: 6px; font-size: 0.8rem; opacity: 0.85; pointer-events: none; backdrop-filter: blur(4px); }
-  button.action-btn { background: rgba(0,243,255,0.15); border: 1px solid #00f3ff; color: #00f3ff; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+  button.action-btn { background: rgba(255,255,255,0.08); border: 1px solid #00f3ff; color: #00f3ff; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; transition: 0.2s; }
   button.action-btn:hover, button.action-btn.active { background: #00f3ff; color: #050a12; box-shadow: 0 0 12px #00f3ff; }
 </style>
 </head>
@@ -28,7 +28,7 @@
     <button id="change-color" class="action-btn">Cycle Hologram Color</button>
   </div>
   <div id="model-label" class="model-indicator">01 / 03 // Spur Gear Assembly</div>
-  <div class="controls-hint">Drag: Rotate &nbsp;|&nbsp; Scroll: Zoom</div>
+  <div class="controls-hint">Hover: Explode &nbsp;|&nbsp; Drag: Rotate &nbsp;|&nbsp; Scroll: Zoom</div>
   <canvas id="holoCanvas"></canvas>
 
 <script>
@@ -88,8 +88,17 @@ const models = [
   })()
 ];
 
-let mIdx = 0, rotX = 0.18, rotY = -0.55, zoom = 1.0, autoSpin = true, isExp = false, expP = 0, drag = false, lastM = { x: 0, y: 0 }, cIdx = 0;
-const colors = new Array('#00f3ff', '#00ff88', '#ff9900', '#b84dff');
+let mIdx = 0, rotX = 0.18, rotY = -0.55, zoom = 1.0, autoSpin = true, isExp = false, isHovering = false, expP = 0, drag = false, lastM = { x: 0, y: 0 }, cIdx = 0;
+const colors = new Array('#00f3ff', '#ffffff', '#00ff88', '#ff9900', '#b84dff');
+
+function applyThemeColor(c) {
+  document.body.style.color = c;
+  document.querySelectorAll('.nav-arrow, .action-btn').forEach(b => {
+    b.style.borderColor = c;
+    b.style.color = b.classList.contains('active') ? '#050a12' : c;
+    b.style.background = b.classList.contains('active') ? c : 'rgba(5,15,28,0.75)';
+  });
+}
 
 function switchModel(d) {
   mIdx = (mIdx + d + models.length) % models.length;
@@ -101,21 +110,29 @@ window.onkeydown = (e) => { if (e.key === 'ArrowLeft') switchModel(-1); if (e.ke
 
 canvas.onmousedown = (e) => { drag = true; lastM = { x: e.clientX, y: e.clientY }; };
 window.onmouseup = () => drag = false;
+canvas.onmouseleave = () => { isHovering = false; };
 window.onmousemove = (e) => {
-  if (!drag) return;
-  rotY += (e.clientX - lastM.x) * 0.008;
-  rotX = Math.max(-1.4, Math.min(1.4, rotX + (e.clientY - lastM.y) * 0.008));
-  lastM = { x: e.clientX, y: e.clientY };
+  if (drag) {
+    rotY += (e.clientX - lastM.x) * 0.008;
+    rotX = Math.max(-1.4, Math.min(1.4, rotX + (e.clientY - lastM.y) * 0.008));
+    lastM = { x: e.clientX, y: e.clientY };
+  }
+  const hitRadius = Math.min(width, height) * 0.38 * zoom;
+  const distFromCenter = Math.hypot(e.clientX - width / 2, e.clientY - height / 2);
+  isHovering = e.target === canvas && distFromCenter <= hitRadius;
 };
 canvas.addEventListener('wheel', (e) => { e.preventDefault(); zoom = Math.max(0.3, Math.min(2.5, zoom * (e.deltaY > 0 ? 0.92 : 1.08))); }, { passive: false });
 
-document.getElementById('toggle-explode').onclick = (e) => { isExp = !isExp; e.target.classList.toggle('active', isExp); e.target.textContent = isExp ? 'Collapse View' : 'Exploded View'; };
+document.getElementById('toggle-explode').onclick = (e) => {
+  isExp = !isExp;
+  e.target.classList.toggle('active', isExp);
+  e.target.textContent = isExp ? 'Collapse View' : 'Exploded View';
+  applyThemeColor(colors.at(cIdx));
+};
 document.getElementById('toggle-spin').onclick = (e) => { autoSpin = !autoSpin; e.target.textContent = autoSpin ? 'Pause Rotation' : 'Resume Rotation'; };
 document.getElementById('change-color').onclick = () => {
   cIdx = (cIdx + 1) % colors.length;
-  const c = colors.at(cIdx);
-  document.body.style.color = c;
-  document.querySelectorAll('.nav-arrow, .action-btn').forEach(b => { b.style.borderColor = c; b.style.color = b.classList.contains('active') ? '#050a12' : c; });
+  applyThemeColor(colors.at(cIdx));
 };
 
 function project(pt) {
@@ -130,7 +147,8 @@ function project(pt) {
 
 function render() {
   if (autoSpin && !drag) rotY += 0.002;
-  expP += ((isExp ? 1 : 0) - expP) * 0.08;
+  const targetExp = (isExp || isHovering) ? 1 : 0;
+  expP += (targetExp - expP) * 0.08;
   ctx.fillStyle = '#050a12';
   ctx.fillRect(0, 0, width, height);
 
