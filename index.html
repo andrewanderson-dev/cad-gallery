@@ -1,293 +1,155 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Hologram CAD Portfolio Viewer</title>
-  <style>
-    body {
-      margin: 0;
-      overflow: hidden;
-      background-color: #050a12;
-      font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-      color: #00f3ff;
-    }
-    canvas {
-      width: 100vw;
-      height: 100vh;
-      display: block;
-      cursor: grab;
-    }
-    canvas:active {
-      cursor: grabbing;
-    }
-    .hud-overlay {
-      position: absolute;
-      top: 20px;
-      left: 20px;
-      pointer-events: none;
-      border-left: 3px solid #00f3ff;
-      padding-left: 15px;
-      text-shadow: 0 0 10px rgba(0, 243, 255, 0.7);
-    }
-    .hud-overlay h1 {
-      margin: 0 0 5px 0;
-      font-size: 1.4rem;
-      letter-spacing: 2px;
-      text-transform: uppercase;
-    }
-    .hud-overlay p {
-      margin: 0;
-      font-size: 0.85rem;
-      color: #80f9ff;
-    }
-    .controls-panel {
-      position: absolute;
-      bottom: 20px;
-      left: 20px;
-      background: rgba(5, 15, 28, 0.8);
-      border: 1px solid rgba(0, 243, 255, 0.4);
-      padding: 12px 16px;
-      border-radius: 6px;
-      display: flex;
-      gap: 15px;
-      align-items: center;
-      backdrop-filter: blur(4px);
-    }
-    button {
-      background: rgba(0, 243, 255, 0.15);
-      border: 1px solid #00f3ff;
-      color: #00f3ff;
-      padding: 6px 12px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-weight: bold;
-      transition: all 0.2s;
-    }
-    button:hover, button.active {
-      background: #00f3ff;
-      color: #050a12;
-      box-shadow: 0 0 12px #00f3ff;
-    }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hologram CAD Portfolio Viewer</title>
+<style>
+  body { margin: 0; overflow: hidden; background: #050a12; font-family: 'Segoe UI', sans-serif; color: #00f3ff; user-select: none; }
+  canvas { width: 100vw; height: 100vh; display: block; cursor: grab; }
+  canvas:active { cursor: grabbing; }
+  .nav-arrow { position: absolute; top: 50%; transform: translateY(-50%); background: rgba(5,15,28,0.75); border: 1px solid rgba(0,243,255,0.45); color: #00f3ff; width: 48px; height: 64px; font-size: 1.6rem; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); transition: 0.2s; z-index: 10; }
+  .nav-arrow:hover { background: #00f3ff; color: #050a12; box-shadow: 0 0 15px #00f3ff; }
+  #prev-model { left: 20px; }
+  #next-model { right: 20px; }
+  .model-indicator { position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%); font-size: 0.85rem; letter-spacing: 2px; text-transform: uppercase; opacity: 0.85; pointer-events: none; text-shadow: 0 0 8px currentColor; }
+  .controls-panel { position: absolute; bottom: 20px; left: 20px; background: rgba(5,15,28,0.8); border: 1px solid rgba(0,243,255,0.4); padding: 10px 14px; border-radius: 6px; display: flex; gap: 12px; backdrop-filter: blur(4px); }
+  .controls-hint { position: absolute; bottom: 20px; right: 20px; background: rgba(5,15,28,0.65); border: 1px solid rgba(0,243,255,0.25); padding: 10px 14px; border-radius: 6px; font-size: 0.8rem; opacity: 0.85; pointer-events: none; backdrop-filter: blur(4px); }
+  button.action-btn { background: rgba(0,243,255,0.15); border: 1px solid #00f3ff; color: #00f3ff; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+  button.action-btn:hover, button.action-btn.active { background: #00f3ff; color: #050a12; box-shadow: 0 0 12px #00f3ff; }
+</style>
 </head>
 <body>
-
-  <div class="hud-overlay">
-    <h1>CAD Projection // Active</h1>
-    <p>Drag: Rotate | Scroll: Zoom</p>
-  </div>
-
+  <button id="prev-model" class="nav-arrow">&#10094;</button>
+  <button id="next-model" class="nav-arrow">&#10095;</button>
   <div class="controls-panel">
-    <button id="toggle-explode">Exploded View</button>
-    <button id="toggle-spin">Pause Rotation</button>
-    <button id="change-color">Cycle Hologram Color</button>
+    <button id="toggle-explode" class="action-btn">Exploded View</button>
+    <button id="toggle-spin" class="action-btn">Pause Rotation</button>
+    <button id="change-color" class="action-btn">Cycle Hologram Color</button>
   </div>
-
+  <div id="model-label" class="model-indicator">01 / 03 // Spur Gear Assembly</div>
+  <div class="controls-hint">Drag: Rotate &nbsp;|&nbsp; Scroll: Zoom</div>
   <canvas id="holoCanvas"></canvas>
 
-  <script>
-    const canvas = document.getElementById('holoCanvas');
-    const ctx = canvas.getContext('2d');
+<script>
+const canvas = document.getElementById('holoCanvas'), ctx = canvas.getContext('2d');
+let width, height;
+function resize() { width = canvas.width = window.innerWidth; height = canvas.height = window.innerHeight; }
+window.addEventListener('resize', resize); resize();
 
-    let width, height;
-    function resize() {
-      width = canvas.width = window.innerWidth;
-      height = canvas.height = window.innerHeight;
+function addShape(v, e, rOut, rIn, steps, isGear, thick, zOff, expZ, cx = 0, cy = 0) {
+  const s = v.length;
+  for (let l = 0; l < 2; l++) {
+    const z = zOff + (l === 0 ? -thick / 2 : thick / 2);
+    for (let i = 0; i < steps; i++) {
+      const a = (i / steps) * Math.PI * 2;
+      const r = isGear && (i % 4 === 1 || i % 4 === 2) ? rOut : rIn;
+      v.push({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r, z, expZ });
     }
-    window.addEventListener('resize', resize);
-    resize();
+  }
+  for (let i = 0; i < steps; i++) {
+    const n = (i + 1) % steps;
+    e.push(new Array(s + i, s + n), new Array(s + steps + i, s + steps + n), new Array(s + i, s + steps + i));
+  }
+}
 
-    // Store vertices with their sub-assembly Z-explosion offset multiplier
-    const vertices = [];
-    const edges = [];
-
-    function addUprightGear(outerR, innerR, teeth, thickness, zOffset, explodeFactor) {
-      const startIdx = vertices.length;
-      const steps = teeth * 4;
-      for (let layer = 0; layer < 2; layer++) {
-        const z = zOffset + (layer === 0 ? -thickness / 2 : thickness / 2);
-        for (let i = 0; i < steps; i++) {
-          const angle = (i / steps) * Math.PI * 2;
-          const isTooth = (i % 4 === 1 || i % 4 === 2);
-          const r = isTooth ? outerR : innerR;
-          vertices.push({
-            x: Math.cos(angle) * r,
-            y: Math.sin(angle) * r,
-            z: z,
-            explodeZ: explodeFactor
-          });
-        }
-      }
-      for (let i = 0; i < steps; i++) {
-        const next = (i + 1) % steps;
-        edges.push([startIdx + i, startIdx + next]);
-        edges.push([startIdx + steps + i, startIdx + steps + next]);
-        edges.push([startIdx + i, startIdx + steps + i]);
-      }
+const models = [
+  (() => {
+    const v = [], e = [];
+    addShape(v, e, 200, 166, 80, true, 48, 0, 0);
+    addShape(v, e, 94, 75, 48, true, 74, 0, 110);
+    addShape(v, e, 44, 44, 24, false, 176, 0, -115);
+    addShape(v, e, 56, 56, 24, false, 14, 52, 195);
+    return { name: '01 / 03 // Spur Gear Assembly', v, e, zMin: -210, zMax: 265 };
+  })(),
+  (() => {
+    const v = [], e = [];
+    addShape(v, e, 200, 200, 36, false, 44, 0, 0);
+    addShape(v, e, 176, 176, 36, false, 44, 0, 0);
+    addShape(v, e, 68, 54, 48, true, 52, 0, -110);
+    for (let p = 0; p < 3; p++) {
+      const a = (p / 3) * Math.PI * 2, cx = Math.cos(a) * 114, cy = Math.sin(a) * 114;
+      addShape(v, e, 54, 42, 40, true, 46, 0, 95, cx, cy);
+      addShape(v, e, 18, 18, 16, false, 68, 0, 185, cx, cy);
     }
-
-    function addUprightRing(radius, segments, zOffset, explodeFactor) {
-      const startIdx = vertices.length;
-      for (let i = 0; i < segments; i++) {
-        const angle = (i / segments) * Math.PI * 2;
-        vertices.push({
-          x: Math.cos(angle) * radius,
-          y: Math.sin(angle) * radius,
-          z: zOffset,
-          explodeZ: explodeFactor
-        });
-        edges.push([startIdx + i, startIdx + ((i + 1) % segments)]);
-      }
+    return { name: '02 / 03 // Planetary Drive System', v, e, zMin: -160, zMax: 240 };
+  })(),
+  (() => {
+    const v = [], e = [];
+    addShape(v, e, 185, 185, 32, false, 24, -22, -90);
+    addShape(v, e, 70, 70, 24, false, 90, -55, -155);
+    addShape(v, e, 185, 185, 32, false, 24, 22, 90);
+    addShape(v, e, 70, 70, 24, false, 90, 55, 155);
+    for (let b = 0; b < 6; b++) {
+      const a = (b / 6) * Math.PI * 2;
+      addShape(v, e, 16, 16, 12, false, 76, 0, 210, Math.cos(a) * 135, Math.sin(a) * 135);
     }
+    return { name: '03 / 03 // Flanged Shaft Coupler', v, e, zMin: -220, zMax: 260 };
+  })()
+];
 
-    // Sub-assembly 1: Outer Main Spur Gear (stays centered at 0)
-    addUprightGear(200, 166, 20, 48, 0, 0);
+let mIdx = 0, rotX = 0.18, rotY = -0.55, zoom = 1.0, autoSpin = true, isExp = false, expP = 0, drag = false, lastM = { x: 0, y: 0 }, cIdx = 0;
+const colors = new Array('#00f3ff', '#00ff88', '#ff9900', '#b84dff');
 
-    // Sub-assembly 2: Inner Drive Pinion Hub (slides forward +110 units)
-    addUprightGear(94, 75, 12, 74, 0, 110);
+function switchModel(d) {
+  mIdx = (mIdx + d + models.length) % models.length;
+  document.getElementById('model-label').textContent = models.at(mIdx).name;
+}
+document.getElementById('prev-model').onclick = () => switchModel(-1);
+document.getElementById('next-model').onclick = () => switchModel(1);
+window.onkeydown = (e) => { if (e.key === 'ArrowLeft') switchModel(-1); if (e.key === 'ArrowRight') switchModel(1); };
 
-    // Sub-assembly 3: Central Shaft (slides backward -115 units)
-    addUprightRing(44, 24, -88, -115);
-    addUprightRing(44, 24, 88, -115);
-    for (let i = 0; i < 12; i++) {
-      const angle = (i / 12) * Math.PI * 2;
-      const idx = vertices.length;
-      vertices.push({ x: Math.cos(angle) * 44, y: Math.sin(angle) * 44, z: -88, explodeZ: -115 });
-      vertices.push({ x: Math.cos(angle) * 44, y: Math.sin(angle) * 44, z: 88, explodeZ: -115 });
-      edges.push([idx, idx + 1]);
-    }
+canvas.onmousedown = (e) => { drag = true; lastM = { x: e.clientX, y: e.clientY }; };
+window.onmouseup = () => drag = false;
+window.onmousemove = (e) => {
+  if (!drag) return;
+  rotY += (e.clientX - lastM.x) * 0.008;
+  rotX = Math.max(-1.4, Math.min(1.4, rotX + (e.clientY - lastM.y) * 0.008));
+  lastM = { x: e.clientX, y: e.clientY };
+};
+canvas.addEventListener('wheel', (e) => { e.preventDefault(); zoom = Math.max(0.3, Math.min(2.5, zoom * (e.deltaY > 0 ? 0.92 : 1.08))); }, { passive: false });
 
-    // Sub-assembly 4: Front Retaining Collar Ring (slides far forward +195 units)
-    addUprightRing(56, 24, 46, 195);
-    addUprightRing(56, 24, 58, 195);
-    for (let i = 0; i < 8; i++) {
-      const angle = (i / 8) * Math.PI * 2;
-      const idx = vertices.length;
-      vertices.push({ x: Math.cos(angle) * 56, y: Math.sin(angle) * 56, z: 46, explodeZ: 195 });
-      vertices.push({ x: Math.cos(angle) * 56, y: Math.sin(angle) * 56, z: 58, explodeZ: 195 });
-      edges.push([idx, idx + 1]);
-    }
+document.getElementById('toggle-explode').onclick = (e) => { isExp = !isExp; e.target.classList.toggle('active', isExp); e.target.textContent = isExp ? 'Collapse View' : 'Exploded View'; };
+document.getElementById('toggle-spin').onclick = (e) => { autoSpin = !autoSpin; e.target.textContent = autoSpin ? 'Pause Rotation' : 'Resume Rotation'; };
+document.getElementById('change-color').onclick = () => {
+  cIdx = (cIdx + 1) % colors.length;
+  const c = colors.at(cIdx);
+  document.body.style.color = c;
+  document.querySelectorAll('.nav-arrow, .action-btn').forEach(b => { b.style.borderColor = c; b.style.color = b.classList.contains('active') ? '#050a12' : c; });
+};
 
-    // Camera & Interaction State
-    let rotX = 0.18;
-    let rotY = -0.55;
-    let zoom = 1.0;
-    let autoSpin = true;
-    let isExploded = false;
-    let explodeProgress = 0; // Smooth 0.0 -> 1.0 interpolation
-    let isDragging = false;
-    let lastMouse = { x: 0, y: 0 };
+function project(pt) {
+  const zC = pt.z + (pt.expZ || 0) * expP;
+  const cY = Math.cos(rotY), sY = Math.sin(rotY), x = pt.x * cY - zC * sY;
+  let z = zC * cY + pt.x * sY;
+  const cX = Math.cos(rotX), sX = Math.sin(rotX), y = pt.y * cX - z * sX;
+  z = z * cX + pt.y * sX;
+  const scale = ((Math.min(width, height) * 0.41) / 200) * (750 / (750 + z)) * zoom;
+  return { x: width / 2 + x * scale, y: height / 2 + y * scale };
+}
 
-    const colors = ['#00f3ff', '#00ff88', '#ff9900', '#b84dff'];
-    let colorIdx = 0;
+function render() {
+  if (autoSpin && !drag) rotY += 0.002;
+  expP += ((isExp ? 1 : 0) - expP) * 0.08;
+  ctx.fillStyle = '#050a12';
+  ctx.fillRect(0, 0, width, height);
 
-    canvas.addEventListener('mousedown', (e) => {
-      isDragging = true;
-      lastMouse = { x: e.clientX, y: e.clientY };
-    });
-    window.addEventListener('mouseup', () => isDragging = false);
-    window.addEventListener('mousemove', (e) => {
-      if (!isDragging) return;
-      rotY += (e.clientX - lastMouse.x) * 0.008;
-      rotX += (e.clientY - lastMouse.y) * 0.008;
-      rotX = Math.max(-1.4, Math.min(1.4, rotX));
-      lastMouse = { x: e.clientX, y: e.clientY };
-    });
-    canvas.addEventListener('wheel', (e) => {
-      e.preventDefault();
-      zoom *= e.deltaY > 0 ? 0.92 : 1.08;
-      zoom = Math.max(0.3, Math.min(2.5, zoom));
-    }, { passive: false });
+  const col = colors.at(cIdx), mod = models.at(mIdx);
+  if (expP > 0.02) {
+    const a1 = project({ x: 0, y: 0, z: mod.zMin * expP }), a2 = project({ x: 0, y: 0, z: mod.zMax * expP });
+    ctx.save(); ctx.setLineDash(new Array(6, 6)); ctx.strokeStyle = col; ctx.globalAlpha = 0.35 * expP; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(a1.x, a1.y); ctx.lineTo(a2.x, a2.y); ctx.stroke(); ctx.restore();
+  }
 
-    document.getElementById('toggle-explode').addEventListener('click', (e) => {
-      isExploded = !isExploded;
-      e.target.classList.toggle('active', isExploded);
-      e.target.textContent = isExploded ? 'Collapse View' : 'Exploded View';
-    });
-    document.getElementById('toggle-spin').addEventListener('click', (e) => {
-      autoSpin = !autoSpin;
-      e.target.textContent = autoSpin ? 'Pause Rotation' : 'Resume Rotation';
-    });
-    document.getElementById('change-color').addEventListener('click', () => {
-      colorIdx = (colorIdx + 1) % colors.length;
-      const c = colors.at(colorIdx);
-      document.body.style.color = c;
-      document.querySelector('.hud-overlay').style.borderLeftColor = c;
-      document.querySelector('.hud-overlay p').style.color = c;
-    });
-
-    function project(pt) {
-      const zCurrent = pt.z + (pt.explodeZ || 0) * explodeProgress;
-
-      const cosY = Math.cos(rotY), sinY = Math.sin(rotY);
-      let x = pt.x * cosY - zCurrent * sinY;
-      let z = zCurrent * cosY + pt.x * sinY;
-
-      const cosX = Math.cos(rotX), sinX = Math.sin(rotX);
-      let y = pt.y * cosX - z * sinX;
-      z = z * cosX + pt.y * sinX;
-
-      const fitScale = (Math.min(width, height) * 0.41) / 200;
-      const cameraDist = 750;
-      const perspective = cameraDist / (cameraDist + z);
-      const scale = fitScale * perspective * zoom;
-
-      return {
-        x: width / 2 + x * scale,
-        y: height / 2 + y * scale,
-        z: z
-      };
-    }
-
-    function render() {
-      if (autoSpin && !isDragging) rotY += 0.002;
-
-      // Smoothly ease explodeProgress toward target (0 or 1)
-      const targetExplode = isExploded ? 1.0 : 0.0;
-      explodeProgress += (targetExplode - explodeProgress) * 0.08;
-
-      ctx.fillStyle = '#050a12';
-      ctx.fillRect(0, 0, width, height);
-
-      const mainColor = colors.at(colorIdx);
-
-      // Draw dashed CAD centerline axis when exploded
-      if (explodeProgress > 0.02) {
-        const axisStart = project({ x: 0, y: 0, z: -210 * explodeProgress, explodeZ: 0 });
-        const axisEnd = project({ x: 0, y: 0, z: 265 * explodeProgress, explodeZ: 0 });
-        ctx.save();
-        ctx.setLineDash([6, 6]);
-        ctx.strokeStyle = mainColor;
-        ctx.globalAlpha = 0.35 * explodeProgress;
-        ctx.lineWidth = 1.2;
-        ctx.beginPath();
-        ctx.moveTo(axisStart.x, axisStart.y);
-        ctx.lineTo(axisEnd.x, axisEnd.y);
-        ctx.stroke();
-        ctx.restore();
-      }
-
-      // Draw Glowing Hologram Gear Assembly
-      const projected = vertices.map(project);
-      ctx.shadowBlur = 14;
-      ctx.shadowColor = mainColor;
-      ctx.strokeStyle = mainColor;
-      ctx.globalAlpha = 0.88;
-      ctx.lineWidth = 1.6;
-
-      ctx.beginPath();
-      for (const [i, j] of edges) {
-        ctx.moveTo(projected.at(i).x, projected.at(i).y);
-        ctx.lineTo(projected.at(j).x, projected.at(j).y);
-      }
-      ctx.stroke();
-
-      ctx.shadowBlur = 0;
-      ctx.globalAlpha = 1.0;
-      requestAnimationFrame(render);
-    }
-    render();
-  </script>
+  const proj = mod.v.map(project);
+  ctx.shadowBlur = 14; ctx.shadowColor = col; ctx.strokeStyle = col; ctx.globalAlpha = 0.88; ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  for (const pair of mod.e) { ctx.moveTo(proj.at(pair.at(0)).x, proj.at(pair.at(0)).y); ctx.lineTo(proj.at(pair.at(1)).x, proj.at(pair.at(1)).y); }
+  ctx.stroke();
+  ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+  requestAnimationFrame(render);
+}
+render();
+</script>
 </body>
 </html>
