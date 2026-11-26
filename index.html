@@ -66,6 +66,9 @@
       box-shadow: 0 0 12px #00f3ff;
     }
   </style>
+  <!-- Standard Cloudflare CDN links (no @ symbols or importmaps) -->
+  <script src="https://cloudflare.com"></script>
+  <script src="https://jsdelivr.net"></script>
 </head>
 <body>
 
@@ -82,10 +85,7 @@
 
   <div id="canvas-container"></div>
 
-  <script type="module">
-    import * as THREE from 'https://esm.sh';
-    import { OrbitControls } from 'https://esm.sh/examples/jsm/controls/OrbitControls.js';
-
+  <script>
     const scene = new THREE.Scene();
     scene.fog = new THREE.FogExp2(0x050a12, 0.035);
 
@@ -97,7 +97,7 @@
     renderer.setPixelRatio(window.devicePixelRatio);
     document.getElementById('canvas-container').appendChild(renderer.domElement);
 
-    const controls = new OrbitControls(camera, renderer.domElement);
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
 
