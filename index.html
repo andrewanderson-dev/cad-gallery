@@ -130,35 +130,25 @@
       }
     }
 
-    // Create Large Upright Main Gear, Inner Hub, and Horizontal Central Shaft
-    addUprightGear(195, 162, 20, 46, 0);
-    addUprightGear(92, 74, 12, 72, 0);
-    addUprightRing(42, 24, -85);
-    addUprightRing(42, 24, 85);
+    // Normalized Geometry (Max radius = 200 units)
+    addUprightGear(200, 166, 20, 48, 0);
+    addUprightGear(94, 75, 12, 74, 0);
+    addUprightRing(44, 24, -88);
+    addUprightRing(44, 24, 88);
 
     // Shaft horizontal struts
     for (let i = 0; i < 12; i++) {
       const angle = (i / 12) * Math.PI * 2;
       const idx = vertices.length;
-      vertices.push({ x: Math.cos(angle) * 42, y: Math.sin(angle) * 42, z: -85 });
-      vertices.push({ x: Math.cos(angle) * 42, y: Math.sin(angle) * 42, z: 85 });
+      vertices.push({ x: Math.cos(angle) * 44, y: Math.sin(angle) * 44, z: -88 });
+      vertices.push({ x: Math.cos(angle) * 44, y: Math.sin(angle) * 44, z: 88 });
       edges.push([idx, idx + 1]);
-    }
-
-    // Hologram Floor Grid beneath the upright gear
-    const gridLines = [];
-    const gridSize = 320;
-    const gridStep = 40;
-    const floorY = 215;
-    for (let g = -gridSize; g <= gridSize; g += gridStep) {
-      gridLines.push([{ x: g, y: floorY, z: -gridSize }, { x: g, y: floorY, z: gridSize }]);
-      gridLines.push([{ x: -gridSize, y: floorY, z: g }, { x: gridSize, y: floorY, z: g }]);
     }
 
     // Camera & Interaction State
     let rotX = 0.15;
     let rotY = -0.45;
-    let zoom = 1.45;
+    let zoom = 1.0;
     let autoSpin = true;
     let isDragging = false;
     let lastMouse = { x: 0, y: 0 };
@@ -181,7 +171,7 @@
     canvas.addEventListener('wheel', (e) => {
       e.preventDefault();
       zoom *= e.deltaY > 0 ? 0.92 : 1.08;
-      zoom = Math.max(0.4, Math.min(3.0, zoom));
+      zoom = Math.max(0.3, Math.min(2.5, zoom));
     }, { passive: false });
 
     document.getElementById('toggle-spin').addEventListener('click', (e) => {
@@ -205,8 +195,12 @@
       let y = pt.y * cosX - z * sinX;
       z = z * cosX + pt.y * sinX;
 
-      const fov = 550 * zoom;
-      const scale = fov / (fov + z + 420);
+      // Scale dynamically so 200-unit radius fills ~82% of the viewport height
+      const fitScale = (Math.min(width, height) * 0.41) / 200;
+      const cameraDist = 750;
+      const perspective = cameraDist / (cameraDist + z);
+      const scale = fitScale * perspective * zoom;
+
       return {
         x: width / 2 + x * scale,
         y: height / 2 + y * scale,
@@ -222,26 +216,13 @@
 
       const mainColor = colors.at(colorIdx);
 
-      // Draw Floor Grid
-      ctx.strokeStyle = mainColor;
-      ctx.globalAlpha = 0.14;
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      for (const [p1, p2] of gridLines) {
-        const a = project(p1);
-        const b = project(p2);
-        ctx.moveTo(a.x, a.y);
-        ctx.lineTo(b.x, b.y);
-      }
-      ctx.stroke();
-
       // Draw Glowing Hologram Gear
       const projected = vertices.map(project);
-      ctx.shadowBlur = 12;
+      ctx.shadowBlur = 14;
       ctx.shadowColor = mainColor;
       ctx.strokeStyle = mainColor;
-      ctx.globalAlpha = 0.85;
-      ctx.lineWidth = 1.5;
+      ctx.globalAlpha = 0.88;
+      ctx.lineWidth = 1.6;
 
       ctx.beginPath();
       for (const [i, j] of edges) {
