@@ -97,67 +97,68 @@
     window.addEventListener('resize', resize);
     resize();
 
-    // Build a 3D Mechanical Gear Mesh (Vertices + Edges)
+    // Build an Upright 3D Mechanical Gear Mesh (X-Y plane, thickness along Z)
     const vertices = [];
     const edges = [];
 
-    function addGear(outerR, innerR, teeth, thickness, yOffset) {
+    function addUprightGear(outerR, innerR, teeth, thickness, zOffset) {
       const startIdx = vertices.length;
       const steps = teeth * 4;
       for (let layer = 0; layer < 2; layer++) {
-        const y = yOffset + (layer === 0 ? -thickness / 2 : thickness / 2);
+        const z = zOffset + (layer === 0 ? -thickness / 2 : thickness / 2);
         for (let i = 0; i < steps; i++) {
           const angle = (i / steps) * Math.PI * 2;
           const isTooth = (i % 4 === 1 || i % 4 === 2);
           const r = isTooth ? outerR : innerR;
-          vertices.push({ x: Math.cos(angle) * r, y: y, z: Math.sin(angle) * r });
+          vertices.push({ x: Math.cos(angle) * r, y: Math.sin(angle) * r, z: z });
         }
       }
       for (let i = 0; i < steps; i++) {
         const next = (i + 1) % steps;
-        // Top ring, bottom ring, and vertical struts
         edges.push([startIdx + i, startIdx + next]);
         edges.push([startIdx + steps + i, startIdx + steps + next]);
         edges.push([startIdx + i, startIdx + steps + i]);
       }
     }
 
-    function addRing(radius, segments, yOffset) {
+    function addUprightRing(radius, segments, zOffset) {
       const startIdx = vertices.length;
       for (let i = 0; i < segments; i++) {
         const angle = (i / segments) * Math.PI * 2;
-        vertices.push({ x: Math.cos(angle) * radius, y: yOffset, z: Math.sin(angle) * radius });
+        vertices.push({ x: Math.cos(angle) * radius, y: Math.sin(angle) * radius, z: zOffset });
         edges.push([startIdx + i, startIdx + ((i + 1) % segments)]);
       }
     }
 
-    // Create Main Gear, Inner Hub, and Central Shaft
-    addGear(140, 115, 18, 36, 0);
-    addGear(65, 52, 12, 55, 0);
-    addRing(30, 24, -65);
-    addRing(30, 24, 65);
-    // Shaft vertical lines
+    // Create Large Upright Main Gear, Inner Hub, and Horizontal Central Shaft
+    addUprightGear(195, 162, 20, 46, 0);
+    addUprightGear(92, 74, 12, 72, 0);
+    addUprightRing(42, 24, -85);
+    addUprightRing(42, 24, 85);
+
+    // Shaft horizontal struts
     for (let i = 0; i < 12; i++) {
       const angle = (i / 12) * Math.PI * 2;
       const idx = vertices.length;
-      vertices.push({ x: Math.cos(angle) * 30, y: -65, z: Math.sin(angle) * 30 });
-      vertices.push({ x: Math.cos(angle) * 30, y: 65, z: Math.sin(angle) * 30 });
+      vertices.push({ x: Math.cos(angle) * 42, y: Math.sin(angle) * 42, z: -85 });
+      vertices.push({ x: Math.cos(angle) * 42, y: Math.sin(angle) * 42, z: 85 });
       edges.push([idx, idx + 1]);
     }
 
-    // Hologram Floor Grid
+    // Hologram Floor Grid beneath the upright gear
     const gridLines = [];
-    const gridSize = 260;
+    const gridSize = 320;
     const gridStep = 40;
+    const floorY = 215;
     for (let g = -gridSize; g <= gridSize; g += gridStep) {
-      gridLines.push([{ x: g, y: 110, z: -gridSize }, { x: g, y: 110, z: gridSize }]);
-      gridLines.push([{ x: -gridSize, y: 110, z: g }, { x: gridSize, y: 110, z: g }]);
+      gridLines.push([{ x: g, y: floorY, z: -gridSize }, { x: g, y: floorY, z: gridSize }]);
+      gridLines.push([{ x: -gridSize, y: floorY, z: g }, { x: gridSize, y: floorY, z: g }]);
     }
 
     // Camera & Interaction State
-    let rotX = 0.45;
-    let rotY = 0.0;
-    let zoom = 1.0;
+    let rotX = 0.15;
+    let rotY = -0.45;
+    let zoom = 1.45;
     let autoSpin = true;
     let isDragging = false;
     let lastMouse = { x: 0, y: 0 };
@@ -180,7 +181,7 @@
     canvas.addEventListener('wheel', (e) => {
       e.preventDefault();
       zoom *= e.deltaY > 0 ? 0.92 : 1.08;
-      zoom = Math.max(0.4, Math.min(2.5, zoom));
+      zoom = Math.max(0.4, Math.min(3.0, zoom));
     }, { passive: false });
 
     document.getElementById('toggle-spin').addEventListener('click', (e) => {
@@ -196,17 +197,16 @@
     });
 
     function project(pt) {
-      // Rotate Y
       const cosY = Math.cos(rotY), sinY = Math.sin(rotY);
       let x = pt.x * cosY - pt.z * sinY;
       let z = pt.z * cosY + pt.x * sinY;
-      // Rotate X
+
       const cosX = Math.cos(rotX), sinX = Math.sin(rotX);
       let y = pt.y * cosX - z * sinX;
       z = z * cosX + pt.y * sinX;
 
       const fov = 550 * zoom;
-      const scale = fov / (fov + z + 350);
+      const scale = fov / (fov + z + 420);
       return {
         x: width / 2 + x * scale,
         y: height / 2 + y * scale,
@@ -214,10 +214,8 @@
       };
     }
 
-    let time = 0;
     function render() {
-      time += 0.04;
-      if (autoSpin && !isDragging) rotY += 0.008;
+      if (autoSpin && !isDragging) rotY += 0.002;
 
       ctx.fillStyle = '#050a12';
       ctx.fillRect(0, 0, width, height);
@@ -251,16 +249,6 @@
         ctx.lineTo(projected.at(j).x, projected.at(j).y);
       }
       ctx.stroke();
-
-      // Draw Animated Hologram Scanline Sweep
-      const scanY = (height / 2) + Math.sin(time) * 140 * zoom;
-      const grad = ctx.createLinearGradient(0, scanY - 25, 0, scanY + 25);
-      grad.addColorStop(0, 'transparent');
-      grad.addColorStop(0.5, mainColor);
-      grad.addColorStop(1, 'transparent');
-      ctx.globalAlpha = 0.18;
-      ctx.fillStyle = grad;
-      ctx.fillRect(width / 2 - 220 * zoom, scanY - 25, 440 * zoom, 50);
 
       ctx.shadowBlur = 0;
       ctx.globalAlpha = 1.0;
